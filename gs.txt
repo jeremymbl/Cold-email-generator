@@ -1,0 +1,513 @@
+================================================================================
+FILE: config.py
+================================================================================
+
+# BEFORE WE START: 
+# 1. pip install python-dotenv
+# 2. Create a .env file in the project root with lines like:
+#       OPENAI_API_KEY=sk-xxxx
+#       HUBSPOT_API_KEY=xxxx
+# 3. Ensure .env is in .gitignore
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# ================ OPENAI CONFIG ================ #
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", default="")
+
+# ================ HUBSPOT CONFIG ================ #
+HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY", default="")
+HUBSPOT_BASE_URL = os.getenv("HUBSPOT_BASE_URL", default="")
+
+# ================ FILE CONFIG ================ #
+TAMTAM_EXCEL_FILE = "output-tamtam-lookalike-2024-11-13T18_42_33.xlsx"
+OUTPUT_FILE = "generated_cold_emails.csv"
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: requirements.txt
+================================================================================
+
+openai==0.27.0
+pandas==2.0.3
+# requests==2.31.0
+openpyxl==3.1.2
+python-dotenv==1.0.1
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: data_loader.py
+================================================================================
+
+"""
+data_loader.py
+
+Responsible for loading data from Tamtam exports (Excel/CSV)
+and merging it with CRM data from HubSpot, if available.
+"""
+import os
+import requests
+import pandas as pd
+from config import (
+    TAMTAM_EXCEL_FILE,
+    HUBSPOT_API_KEY,
+    HUBSPOT_BASE_URL
+)
+
+
+def load_tamtam_data() -> pd.DataFrame:
+    """
+    Loads the Tamtam lookalike data from an Excel file.
+    Returns a pandas DataFrame with columns:
+        - Company
+        - Revenu
+        - Countries
+        - Strategy
+        - Painpoints
+        - Product use cases
+    """
+    # Read the Excel file
+    df = pd.read_excel(TAMTAM_EXCEL_FILE)
+    
+    # Basic cleanup
+    df.fillna("", inplace=True)
+    return df
+
+
+def load_hubspot_data() -> pd.DataFrame:
+    """
+    Demonstrates how to fetch data from HubSpot CRM using the API.
+    Return a pandas DataFrame that you can merge with Tamtam data.
+    
+    This function is simplified. HubSpot has many endpoints, e.g. '/contacts/v1/contact'.
+    You should adapt the endpoint & data you actually need.
+    """
+    """
+    if not HUBSPOT_API_KEY or "YOUR_HUBSPOT_API_KEY_HERE" in HUBSPOT_API_KEY:
+        # If user hasn't filled the key, just return an empty DataFrame
+        # or log a message. We'll skip the real HubSpot call.
+        print("HubSpot API Key not set. Skipping CRM data load.")
+        return pd.DataFrame()
+    
+    try:
+        url = f"{HUBSPOT_BASE_URL}/contacts/v1/lists/all/contacts/all"
+        params = {
+            "hapikey": HUBSPOT_API_KEY,
+            "count": 100  # number of contacts to fetch
+        }
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        # Extract only a minimal set of info for demonstration:
+        # (In practice, you'd parse 'contacts' object more thoroughly)
+        contacts = []
+        for c in data.get("contacts", []):
+            company_name = c.get("properties", {}).get("company", {}).get("value", "")
+            domain = c.get("properties", {}).get("domain", {}).get("value", "")
+            hs_contact_id = c.get("vid", "")
+            contacts.append({
+                "Company": company_name,
+                "Domain": domain,
+                "HS_Contact_ID": hs_contact_id
+            })
+        
+        df = pd.DataFrame(contacts)
+        return df
+    
+    except Exception as e:
+        print(f"Error fetching HubSpot data: {e}")
+        return pd.DataFrame()
+    """
+    print("HubSpot integration disabled. Returning empty DataFrame.")
+    return pd.DataFrame()
+
+
+def merge_data(tamtam_df: pd.DataFrame, hubspot_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merges Tamtam data with HubSpot data on 'Company' or a relevant key.
+    Returns a combined DataFrame.
+    """
+    if hubspot_df.empty:
+        return tamtam_df
+    
+    # Merge on 'Company' column. Adjust if your actual data uses a different key.
+    merged_df = pd.merge(tamtam_df, hubspot_df, on="Company", how="left")
+    
+    # Fill any new columns that are missing
+    merged_df.fillna("", inplace=True)
+    return merged_df
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: gs.py
+================================================================================
+
+"""
+gs.py
+
+Generates a snapshot of your project by iterating over your manually created files
+and writing their filenames and content to a file called gs.txt.
+
+Only files with specific extensions (like .py, .txt, .md) or specific names (e.g. requirements.txt)
+are included. Directories known to be auto-generated (such as __pycache__, .git, venv, etc.)
+are skipped.
+
+Usage: Run this file in your project root with "python gs.py"
+"""
+
+import os
+
+# Directories to ignore (commonly auto-generated or not manually created)
+IGNORE_DIRS = {"__pycache__", ".git", "venv", "env", "node_modules", "build", "dist"}
+
+# Allowed file extensions and specific allowed filenames
+ALLOWED_EXTENSIONS = {'.py', '.txt', '.md'}
+ALLOWED_FILES = {"requirements.txt", "README"}  # 'README' with no extension
+
+# Output file name (this file itself will be skipped)
+OUTPUT_FILENAME = "gs.txt"
+
+def is_allowed_file(filename):
+    # Check if filename exactly matches an allowed file (e.g. requirements.txt)
+    if filename in ALLOWED_FILES:
+        return True
+
+    # Check extension: if it has one and is in our allowed list
+    _, ext = os.path.splitext(filename)
+    if ext in ALLOWED_EXTENSIONS:
+        return True
+
+    return False
+
+def main():
+    snapshot_lines = []
+
+    # Walk through the current directory recursively
+    for root, dirs, files in os.walk("."):
+        # Skip ignored directories by modifying dirs in-place
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+
+        for file in files:
+            # Skip the output file itself to avoid recursion issues
+            if file == OUTPUT_FILENAME:
+                continue
+
+            if is_allowed_file(file):
+                filepath = os.path.join(root, file)
+                # Add header for the file
+                snapshot_lines.append("=" * 80)
+                snapshot_lines.append(f"FILE: {os.path.relpath(filepath)}")
+                snapshot_lines.append("=" * 80)
+                snapshot_lines.append("")
+
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                except Exception as e:
+                    content = f"Error reading file: {e}"
+
+                snapshot_lines.append(content)
+                snapshot_lines.append("\n" + "-" * 80 + "\n")
+
+    # Write the snapshot to gs.txt in the current directory
+    with open(OUTPUT_FILENAME, "w", encoding="utf-8") as out_file:
+        out_file.write("\n".join(snapshot_lines))
+
+    print(f"Snapshot generated and saved to {OUTPUT_FILENAME}")
+
+if __name__ == "__main__":
+    main()
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: prompt_engineering.py
+================================================================================
+
+"""
+prompt_engineering.py
+
+Contains the prompt templates and logic to craft instructions
+for generating cold emails.
+"""
+
+from typing import Dict
+
+def build_cold_email_prompt(company_info: Dict) -> str:
+    company_name = company_info.get("Company", "")
+    revenu = company_info.get("Revenu", "")
+    countries = company_info.get("Countries", "")
+    strategy = company_info.get("Strategy", "")
+    painpoints = company_info.get("Painpoints", "")
+    product_use_cases = company_info.get("Product use cases", "")
+
+    # Here we add a short "few-shot" style example
+    # to guide the model to produce a subject + short body.
+    example_email = """
+Example of a successful cold email:
+
+SUBJECT: Driving Growth for ACME Inc.'s Global Expansion
+
+BODY:
+Hi Mark,
+
+I noticed ACME Inc. is expanding into new markets this year. At Mirakl, we've helped companies like X and Y streamline their global e-commerce operations, so you can onboard new sellers faster while keeping operational costs low.
+
+Given your strategy to expand to 3 new countries, I'd love to share how our technology could address typical expansion pain points, from cross-border compliance to payment solutions.
+
+If that sounds relevant, I'd be happy to schedule a brief 15-minute chat next week. Looking forward to hearing from you!
+
+Best,
+[Your Name]
+"""
+
+    prompt = f"""
+You are an AI sales assistant at Mirakl. 
+Your role: write a personalized cold outreach email to {company_name}.
+Keep it under 180 words and include a compelling subject line and a short body.
+
+Context for {company_name}:
+- Annual online revenue: {revenu}
+- Countries/Markets: {countries}
+- High-level strategy or areas of focus: {strategy}
+- Potential pain points: {painpoints}
+- Mirakl product use cases: {product_use_cases}
+
+Guidelines:
+1. Write in a friendly, professional tone aligned with Mirakl's brand voice.
+2. Provide a subject line first on a separate line, then the email body.
+3. You can reference the sample format below, but make it unique to this company.
+4. Remain concise and avoid too many bullet points.
+
+Here is an example email for reference:
+{example_email}
+
+Now craft YOUR new subject line and email below:
+"""
+    return prompt.strip()
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: README.txt
+================================================================================
+
+# Cold Email Generator AI Agent
+
+This prototype demonstrates how to build a minimal AI Agent that:
+1. Loads data from a Tamtam-generated Excel file (`output-tamtam-lookalike-2024-11-13T18_42_33.xlsx`).
+2. Optionally fetches matching data from HubSpot CRM using HubSpot's API.
+3. Merges the data.
+4. Uses the OpenAI GPT model to generate personalized cold emails.
+
+## Setup & Usage
+
+1. **Install Python** (3.9+ recommended).
+2. **Clone / Download** this folder into your local machine.
+3. **Fill out your keys**:
+   - In `config.py`, replace `YOUR_OPENAI_API_KEY_HERE` with your real OpenAI API key.
+   - (Optional) If you wish to pull data from HubSpot, replace `YOUR_HUBSPOT_API_KEY_HERE` with a valid HubSpot API key.
+4. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: email_generator.py
+================================================================================
+
+"""
+email_generator.py
+
+Contains the function that calls OpenAI's API to generate the emails
+using the prompt. 
+"""
+
+import openai
+from typing import Dict
+from config import OPENAI_API_KEY
+from prompt_engineering import build_cold_email_prompt
+import time
+import logging
+
+# We'll add a global or module-level variable to track cumulative cost
+TOTAL_API_COST = 0.0
+
+def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
+    """
+    Calls OpenAI to generate a cold email. 
+    Optionally updates a shared cost_tracker dict with aggregated usage/cost.
+    """
+    global TOTAL_API_COST
+
+    openai.api_key = OPENAI_API_KEY
+    prompt = build_cold_email_prompt(company_info)
+    start_time = time.time()
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful AI sales assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8,
+            max_tokens=300
+        )
+        end_time = time.time()
+        response_time = end_time - start_time
+
+        generated_text = response["choices"][0]["message"]["content"].strip()
+        usage = response.get("usage", {})
+        total_tokens = usage.get("total_tokens", 0)
+        estimated_cost = (total_tokens / 1000) * 0.002
+
+        # Update global and optional dictionary
+        TOTAL_API_COST += estimated_cost
+        if cost_tracker is not None:
+            cost_tracker["TotalTokens"] += total_tokens
+            cost_tracker["TotalCost"] += estimated_cost
+
+        logging.info("API Response Time: %.2f seconds", response_time)
+        logging.info("Tokens used: %d, Estimated cost: $%.5f", total_tokens, estimated_cost)
+        logging.info("Running total cost (global): $%.5f", TOTAL_API_COST)
+
+        return {
+            "GeneratedEmail": generated_text,
+            "ResponseTime": response_time,
+            "TokensUsed": total_tokens,
+            "EstimatedCost": estimated_cost
+        }
+
+    except Exception as e:
+        logging.error("Error generating email for %s: %s", company_info.get("Company", "Unknown"), e)
+        return {
+            "GeneratedEmail": "",
+            "ResponseTime": None,
+            "TokensUsed": None,
+            "EstimatedCost": None
+        }
+
+--------------------------------------------------------------------------------
+
+================================================================================
+FILE: main.py
+================================================================================
+
+"""
+main.py
+
+Entry point for running the Cold Emails Generator AI Agent for a single selected company.
+"""
+
+import pandas as pd
+from data_loader import load_tamtam_data, load_hubspot_data, merge_data
+from email_generator import generate_cold_email
+from config import OUTPUT_FILE
+import logging
+
+def main(batch_mode: bool = False):
+    tamtam_df = load_tamtam_data()
+    hubspot_df = load_hubspot_data()
+    merged_df = merge_data(tamtam_df, hubspot_df)
+
+    if merged_df.empty:
+        print("No companies found in the data.")
+        return
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    if not batch_mode:
+        # -- Interactive single-company mode --
+        logging.info("Available companies:")
+        for idx, row in merged_df.iterrows():
+            logging.info(f"{idx}: {row.get('Name', 'Unnamed Company')}")
+
+        try:
+            selected_index = int(input("Enter the index of the company for which you want to generate the email: "))
+        except ValueError:
+            logging.error("Invalid input. Please enter a valid number.")
+            return
+
+        if selected_index not in merged_df.index:
+            print("Invalid index selected.")
+            return
+
+        selected_row = merged_df.loc[selected_index]
+        company_info = {
+            "Company": selected_row.get("Name", ""),
+            "Revenu": selected_row.get("Revenue", ""),
+            "Countries": selected_row.get("Countries", ""),
+            "Strategy": selected_row.get("Strategy", ""),
+            "Painpoints": selected_row.get("Pain Points", ""),
+            "Product use cases": selected_row.get("Products & use cases", "")
+        }
+        logging.info("Validated Input Data: %s", company_info)
+
+        result = generate_cold_email(company_info)
+        email_text = result.get("GeneratedEmail", "")
+
+        print("\nGenerated Email:")
+        print("-" * 80)
+        print(email_text)
+        print("-" * 80)
+
+        # Save result to CSV
+        result_item = {
+            "Company": company_info["Company"],
+            "GeneratedEmail": email_text,
+            "ResponseTime_sec": result.get("ResponseTime", ""),
+            "TokensUsed": result.get("TokensUsed", ""),
+            "EstimatedCost_$": result.get("EstimatedCost", "")
+        }
+        results_df = pd.DataFrame([result_item])
+        results_df.to_csv(OUTPUT_FILE, index=False)
+        print(f"Email and metrics saved to {OUTPUT_FILE}")
+
+    else:
+        # -- Batch mode: generate for all rows in the dataframe --
+        all_results = []
+        cost_tracker = {"TotalTokens": 0, "TotalCost": 0.0}  # optional aggregator
+        for idx, row in merged_df.iterrows():
+            company_info = {
+                "Company": row.get("Name", ""),
+                "Revenu": row.get("Revenue", ""),
+                "Countries": row.get("Countries", ""),
+                "Strategy": row.get("Strategy", ""),
+                "Painpoints": row.get("Pain Points", ""),
+                "Product use cases": row.get("Products & use cases", "")
+            }
+            result = generate_cold_email(company_info, cost_tracker=cost_tracker)
+            all_results.append({
+                "Index": idx,
+                "Company": company_info["Company"],
+                "GeneratedEmail": result.get("GeneratedEmail", ""),
+                "ResponseTime_sec": result.get("ResponseTime", ""),
+                "TokensUsed": result.get("TokensUsed", ""),
+                "EstimatedCost_$": result.get("EstimatedCost", "")
+            })
+
+        batch_df = pd.DataFrame(all_results)
+        batch_df.to_csv(OUTPUT_FILE, index=False)
+        print(f"Batch run complete. Emails saved to {OUTPUT_FILE}")
+        logging.info(
+            "Total tokens used: %d, Total estimated cost: $%.5f", 
+            cost_tracker["TotalTokens"], 
+            cost_tracker["TotalCost"]
+        )
+
+if __name__ == "__main__":
+    # You can toggle batch_mode to True/False here or 
+    # parse from command line arguments for flexibility
+    # e.g., python main.py --batch
+    main(batch_mode=True)
+
+--------------------------------------------------------------------------------
