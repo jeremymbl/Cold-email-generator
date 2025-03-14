@@ -69,3 +69,61 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "TokensUsed": None,
             "EstimatedCost": None
         }
+    
+
+def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
+    """
+    Calls OpenAI to generate a CRM-based email using enriched CRM data.
+    Optionally updates a shared cost_tracker dict with aggregated usage/cost.
+    """
+    global TOTAL_API_COST
+
+    openai.api_key = OPENAI_API_KEY
+    # Use the CRM-specific prompt builder
+    from prompt_engineering import build_crm_email_prompt
+    prompt = build_crm_email_prompt(company_info)
+    start_time = time.time()
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful AI sales assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8,
+            max_tokens=300
+        )
+        end_time = time.time()
+        response_time = end_time - start_time
+
+        generated_text = response["choices"][0]["message"]["content"].strip()
+        usage = response.get("usage", {})
+        total_tokens = usage.get("total_tokens", 0)
+        estimated_cost = (total_tokens / 1000) * 0.002
+
+        # Update global and optional dictionary
+        TOTAL_API_COST += estimated_cost
+        if cost_tracker is not None:
+            cost_tracker["TotalTokens"] += total_tokens
+            cost_tracker["TotalCost"] += estimated_cost
+
+        logging.info("CRM Email - API Response Time: %.2f seconds", response_time)
+        logging.info("CRM Email - Tokens used: %d, Estimated cost: $%.5f", total_tokens, estimated_cost)
+        logging.info("CRM Email - Running total cost (global): $%.5f", TOTAL_API_COST)
+
+        return {
+            "GeneratedEmail": generated_text,
+            "ResponseTime": response_time,
+            "TokensUsed": total_tokens,
+            "EstimatedCost": estimated_cost
+        }
+
+    except Exception as e:
+        logging.error("Error generating CRM email for %s: %s", company_info.get("Company", "Unknown"), e)
+        return {
+            "GeneratedEmail": "",
+            "ResponseTime": None,
+            "TokensUsed": None,
+            "EstimatedCost": None
+        }

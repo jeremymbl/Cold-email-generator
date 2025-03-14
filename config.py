@@ -19,5 +19,5 @@ HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY", default="")
 HUBSPOT_BASE_URL = os.getenv("HUBSPOT_BASE_URL", default="")
 
 # ================ FILE CONFIG ================ #
-TAMTAM_EXCEL_FILE = "output-tamtam-lookalike-2024-11-13T18_42_33.xlsx"
+TAMTAM_EXCEL_FILE = "output-tamtam-lookalike-2024-11-13T18_42_33.csv"
 OUTPUT_FILE = "generated_cold_emails.csv"

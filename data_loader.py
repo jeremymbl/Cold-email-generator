@@ -19,15 +19,15 @@ def load_tamtam_data() -> pd.DataFrame:
     Loads the Tamtam lookalike data from an Excel file.
     Returns a pandas DataFrame with columns:
         - Company
-        - Revenu
+        - Revenue
         - Countries
         - Strategy
-        - Painpoints
-        - Product use cases
+        - Pain Points
+        - Products & use cases
     """
     # Read the Excel file
-    df = pd.read_excel(TAMTAM_EXCEL_FILE)
-    
+    df = pd.read_csv(TAMTAM_EXCEL_FILE, sep= ";")
+
     # Basic cleanup
     df.fillna("", inplace=True)
     return df
@@ -35,64 +35,46 @@ def load_tamtam_data() -> pd.DataFrame:
 
 def load_hubspot_data() -> pd.DataFrame:
     """
-    Demonstrates how to fetch data from HubSpot CRM using the API.
-    Return a pandas DataFrame that you can merge with Tamtam data.
-    
-    This function is simplified. HubSpot has many endpoints, e.g. '/contacts/v1/contact'.
-    You should adapt the endpoint & data you actually need.
+    Loads mock CRM data from a local CSV file named 'crm_data.csv'.
+    This simulates fetching data from HubSpot.
+    Assumes the file is tab-delimited and contains an extra index column.
     """
-    """
-    if not HUBSPOT_API_KEY or "YOUR_HUBSPOT_API_KEY_HERE" in HUBSPOT_API_KEY:
-        # If user hasn't filled the key, just return an empty DataFrame
-        # or log a message. We'll skip the real HubSpot call.
-        print("HubSpot API Key not set. Skipping CRM data load.")
+    file_path = "crm_data.csv"  # Make sure this file exists in your project directory
+
+    if not os.path.exists(file_path):
+        print(f"CRM data file not found at {file_path}. Returning empty DataFrame.")
         return pd.DataFrame()
-    
+
     try:
-        url = f"{HUBSPOT_BASE_URL}/contacts/v1/lists/all/contacts/all"
-        params = {
-            "hapikey": HUBSPOT_API_KEY,
-            "count": 100  # number of contacts to fetch
-        }
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        
-        data = response.json()
-        # Extract only a minimal set of info for demonstration:
-        # (In practice, you'd parse 'contacts' object more thoroughly)
-        contacts = []
-        for c in data.get("contacts", []):
-            company_name = c.get("properties", {}).get("company", {}).get("value", "")
-            domain = c.get("properties", {}).get("domain", {}).get("value", "")
-            hs_contact_id = c.get("vid", "")
-            contacts.append({
-                "Company": company_name,
-                "Domain": domain,
-                "HS_Contact_ID": hs_contact_id
-            })
-        
-        df = pd.DataFrame(contacts)
+        # Read the CSV using semicolon as separator and don't use any column as the index
+        df = pd.read_csv(file_path, sep=";", index_col=None)
+        # Basic cleanup: fill missing values with an empty string.
+        df.fillna("", inplace=True)
+        print("Loaded CRM data from crm_data.csv:")
+        print(df.head())
+        print("CRM Data columns:", df.columns.tolist())  # Debug print to verify column names
         return df
-    
     except Exception as e:
-        print(f"Error fetching HubSpot data: {e}")
+        print(f"Error reading CRM data from {file_path}: {e}")
         return pd.DataFrame()
-    """
-    print("HubSpot integration disabled. Returning empty DataFrame.")
-    return pd.DataFrame()
 
 
 def merge_data(tamtam_df: pd.DataFrame, hubspot_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Merges Tamtam data with HubSpot data on 'Company' or a relevant key.
-    Returns a combined DataFrame.
+    Merges Tamtam data with CRM data.
+    Since the CRM data should be hardcoded (using the single CRM row for every company),
+    we ignore the merge key and add the CRM data from the first row to every Tamtam row.
     """
     if hubspot_df.empty:
         return tamtam_df
-    
-    # Merge on 'Company' column. Adjust if your actual data uses a different key.
-    merged_df = pd.merge(tamtam_df, hubspot_df, on="Company", how="left")
-    
-    # Fill any new columns that are missing
-    merged_df.fillna("", inplace=True)
-    return merged_df
+
+    # Retrieve the hardcoded CRM row as a dictionary.
+    crm_row = hubspot_df.iloc[0].to_dict()
+    # Remove the 'Company' key to preserve the Tamtam company name.
+    crm_row.pop("Company", None)
+
+    # Add each CRM field to every row in the Tamtam dataframe.
+    for key, value in crm_row.items():
+        tamtam_df[key] = value
+
+    return tamtam_df

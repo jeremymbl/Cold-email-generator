@@ -1,0 +1,2 @@
+Company;ContactName;Email;Domain;HS_Contact_ID;LastInteraction;EmailHistory;CallSummary;AdditionalNotes
+COMPANY;John Doe;johndoe@company.com;company.com;1001;2024-11-10;"Initial outreach email sent on 2024-10-25; Follow-up email sent on 2024-11-05";"First call on 2024-10-30: Discussed product demo; Second call on 2024-11-07: Answered product questions";"Interested in pilot test; Awaiting further details; The client mentioned they would consider an exclusive partnership if our pricing is competitive."

@@ -22,14 +22,14 @@ def main(batch_mode: bool = False):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
     print("Available companies:")
     for idx, row in merged_df.iterrows():
-        print(f"{idx}: {row.get('Name', 'Unnamed Company')}")
+        print(f"{idx}: {row.get('Company', 'Unnamed Company')}")
     logging.info("Available companies printed to terminal.")
 
     if not batch_mode:
         # -- Interactive single-company mode --
         logging.info("Available companies:")
         for idx, row in merged_df.iterrows():
-            logging.info(f"{idx}: {row.get('Name', 'Unnamed Company')}")
+            logging.info(f"{idx}: {row.get('Company', 'Unnamed Company')}")
 
         try:
             selected_index = int(input("Enter the index of the company for which you want to generate the email: "))
@@ -42,35 +42,80 @@ def main(batch_mode: bool = False):
             return
 
         selected_row = merged_df.loc[selected_index]
-        company_info = {
-            "Company": selected_row.get("Name", ""),
-            "Revenu": selected_row.get("Revenue", ""),
+
+        # Create a dictionary for Tamtam data (as before)
+        company_info_tamtam = {
+            "Company": selected_row.get("Company", ""),
+            "Revenue": selected_row.get("Revenue", ""),
             "Countries": selected_row.get("Countries", ""),
             "Strategy": selected_row.get("Strategy", ""),
-            "Painpoints": selected_row.get("Pain Points", ""),
-            "Product use cases": selected_row.get("Products & use cases", "")
+            "Pain Points": selected_row.get("Pain Points", ""),
+            "Products & use cases": selected_row.get("Products & use cases", "")
         }
-        logging.info("Validated Input Data: %s", company_info)
 
-        result = generate_cold_email(company_info)
-        email_text = result.get("GeneratedEmail", "")
-
-        print("\nGenerated Email:")
-        print("-" * 80)
-        print(email_text)
-        print("-" * 80)
-
-        # Save result to CSV
-        result_item = {
-            "Company": company_info["Company"],
-            "GeneratedEmail": email_text,
-            "ResponseTime_sec": result.get("ResponseTime", ""),
-            "TokensUsed": result.get("TokensUsed", ""),
-            "EstimatedCost_$": result.get("EstimatedCost", "")
+        # Create a dictionary for CRM data using the enriched columns
+                # Create a combined dictionary for CRM version using both TamTam and CRM data
+        company_info_crm = {
+            "Company": selected_row.get("Company", ""),
+            "Revenue": selected_row.get("Revenue", ""),
+            "Countries": selected_row.get("Countries", ""),
+            "Strategy": selected_row.get("Strategy", ""),
+            "Pain Points": selected_row.get("Pain Points", ""),
+            "Products & use cases": selected_row.get("Products & use cases", ""),
+            "ContactName": selected_row.get("ContactName", ""),
+            "Email": selected_row.get("Email", ""),
+            "Domain": selected_row.get("Domain", ""),
+            "HS_Contact_ID": selected_row.get("HS_Contact_ID", ""),
+            "LastInteraction": selected_row.get("LastInteraction", ""),
+            "EmailHistory": selected_row.get("EmailHistory", ""),
+            "CallSummary": selected_row.get("CallSummary", ""),
+            "AdditionalNotes": selected_row.get("AdditionalNotes", "")
         }
-        results_df = pd.DataFrame([result_item])
+
+        logging.info("Validated TamTam Data: %s", company_info_tamtam)
+        logging.info("Validated CRM Data: %s", company_info_crm)
+
+        # Generate email using only Tamtam data
+        result_tamtam = generate_cold_email(company_info_tamtam)
+        email_text_tamtam = result_tamtam.get("GeneratedEmail", "")
+
+        # Generate email using only CRM data
+        from email_generator import generate_crm_email
+        result_crm = generate_crm_email(company_info_crm)
+        email_text_crm = result_crm.get("GeneratedEmail", "")
+
+        print("\nGenerated Email using Tamtam Data:")
+        print("-" * 80)
+        print(email_text_tamtam)
+        print("-" * 80)
+
+        print("\nGenerated Email using CRM Data:")
+        print("-" * 80)
+        print(email_text_crm)
+        print("-" * 80)
+
+        # Save both results to CSV (you can merge them into one DataFrame)
+        results = [
+            {
+                "Version": "TamTam Data",
+                "Company": company_info_tamtam["Company"],
+                "GeneratedEmail": email_text_tamtam,
+                "ResponseTime_sec": result_tamtam.get("ResponseTime", ""),
+                "TokensUsed": result_tamtam.get("TokensUsed", ""),
+                "EstimatedCost_$": result_tamtam.get("EstimatedCost", "")
+            },
+            {
+                "Version": "CRM Data",
+                "Company": company_info_crm["Company"],
+                "GeneratedEmail": email_text_crm,
+                "ResponseTime_sec": result_crm.get("ResponseTime", ""),
+                "TokensUsed": result_crm.get("TokensUsed", ""),
+                "EstimatedCost_$": result_crm.get("EstimatedCost", "")
+            }
+        ]
+        results_df = pd.DataFrame(results)
         results_df.to_csv(OUTPUT_FILE, index=False)
-        print(f"Email and metrics saved to {OUTPUT_FILE}")
+        print(f"Emails and metrics saved to {OUTPUT_FILE}")
 
     else:
         # -- Batch mode: interactive selection of companies --
@@ -102,12 +147,12 @@ def main(batch_mode: bool = False):
         for idx in selected_indices:
             row = merged_df.loc[idx]
             company_info = {
-                "Company": row.get("Name", ""),
-                "Revenu": row.get("Revenue", ""),
+                "Company": row.get("Company", ""),
+                "Revenue": row.get("Revenue", ""),
                 "Countries": row.get("Countries", ""),
                 "Strategy": row.get("Strategy", ""),
-                "Painpoints": row.get("Pain Points", ""),
-                "Product use cases": row.get("Products & use cases", "")
+                "Pain Points": row.get("Pain Points", ""),
+                "Products & use cases": row.get("Products & use cases", "")
             }
             result = generate_cold_email(company_info, cost_tracker=cost_tracker)
             all_results.append({
@@ -129,4 +174,4 @@ if __name__ == "__main__":
     # You can toggle batch_mode to True/False here or 
     # parse from command line arguments for flexibility
     # e.g., python main.py --batch
-    main(batch_mode=True)
+    main(batch_mode=False)
