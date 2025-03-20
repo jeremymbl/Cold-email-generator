@@ -4,7 +4,7 @@ main.py
 
 import pandas as pd
 from data_loader import load_tamtam_data, load_hubspot_data, merge_data
-from email_generator import generate_cold_email
+from email_generator import generate_cold_email, generate_crm_email
 from config import OUTPUT_FILE
 import logging
 
@@ -71,7 +71,6 @@ def main(batch_mode):
         email_text_tamtam = result_tamtam.get("GeneratedEmail", "")
 
         # Generate email using CRM data + Tamtam data
-        from email_generator import generate_crm_email
         result_crm = generate_crm_email(company_info_crm)
         email_text_crm = result_crm.get("GeneratedEmail", "")
 
