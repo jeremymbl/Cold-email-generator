@@ -2,28 +2,20 @@
 FILE: config.py
 ================================================================================
 
-# BEFORE WE START: 
-# 1. pip install python-dotenv
-# 2. Create a .env file in the project root with lines like:
-#       OPENAI_API_KEY=sk-xxxx
-#       HUBSPOT_API_KEY=xxxx
-# 3. Ensure .env is in .gitignore
-
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
-# ================ OPENAI CONFIG ================ #
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", default="")
 
-# ================ HUBSPOT CONFIG ================ #
+# useless for now
 HUBSPOT_API_KEY = os.getenv("HUBSPOT_API_KEY", default="")
 HUBSPOT_BASE_URL = os.getenv("HUBSPOT_BASE_URL", default="")
 
-# ================ FILE CONFIG ================ #
+# files
 TAMTAM_EXCEL_FILE = "output-tamtam-lookalike-2024-11-13T18_42_33.csv"
+CRM_DATA_FILE = "crm_data.csv"
 OUTPUT_FILE = "generated_cold_emails.csv"
 
 --------------------------------------------------------------------------------
@@ -48,81 +40,39 @@ FILE: data_loader.py
 data_loader.py
 
 Responsible for loading data from Tamtam exports (Excel/CSV)
-and merging it with CRM data from HubSpot, if available.
+and merging it with CRM data from HubSpot, if available (right now, we're using crm_data.csv).
 """
 import os
 import requests
 import pandas as pd
 from config import (
     TAMTAM_EXCEL_FILE,
+    CRM_DATA_FILE,
     HUBSPOT_API_KEY,
     HUBSPOT_BASE_URL
 )
 
 
 def load_tamtam_data() -> pd.DataFrame:
-    """
-    Loads the Tamtam lookalike data from an Excel file.
-    Returns a pandas DataFrame with columns:
-        - Company
-        - Revenue
-        - Countries
-        - Strategy
-        - Pain Points
-        - Products & use cases
-    """
-    # Read the Excel file
     df = pd.read_csv(TAMTAM_EXCEL_FILE, sep= ";")
-
-    # Basic cleanup
     df.fillna("", inplace=True)
     return df
 
 
 def load_hubspot_data() -> pd.DataFrame:
-    """
-    Loads mock CRM data from a local CSV file named 'crm_data.csv'.
-    This simulates fetching data from HubSpot.
-    Assumes the file is tab-delimited and contains an extra index column.
-    """
-    file_path = "crm_data.csv"  # Make sure this file exists in your project directory
-
-    if not os.path.exists(file_path):
-        print(f"CRM data file not found at {file_path}. Returning empty DataFrame.")
-        return pd.DataFrame()
-
-    try:
-        # Read the CSV using semicolon as separator and don't use any column as the index
-        df = pd.read_csv(file_path, sep=";", index_col=None)
-        # Basic cleanup: fill missing values with an empty string.
-        df.fillna("", inplace=True)
-        print("Loaded CRM data from crm_data.csv:")
-        print(df.head())
-        print("CRM Data columns:", df.columns.tolist())  # Debug print to verify column names
-        return df
-    except Exception as e:
-        print(f"Error reading CRM data from {file_path}: {e}")
-        return pd.DataFrame()
+    file_path = CRM_DATA_FILE  
+    df = pd.read_csv(file_path, sep=";", index_col=None)
+    df.fillna("", inplace=True)
+    return df
 
 
 def merge_data(tamtam_df: pd.DataFrame, hubspot_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Merges Tamtam data with CRM data.
-    Since the CRM data should be hardcoded (using the single CRM row for every company),
-    we ignore the merge key and add the CRM data from the first row to every Tamtam row.
-    """
     if hubspot_df.empty:
         return tamtam_df
-
-    # Retrieve the hardcoded CRM row as a dictionary.
     crm_row = hubspot_df.iloc[0].to_dict()
-    # Remove the 'Company' key to preserve the Tamtam company name.
     crm_row.pop("Company", None)
-
-    # Add each CRM field to every row in the Tamtam dataframe.
     for key, value in crm_row.items():
         tamtam_df[key] = value
-
     return tamtam_df
 
 
@@ -221,19 +171,7 @@ Contains the prompt templates and logic to craft instructions
 for generating cold emails.
 """
 
-from typing import Dict
-
-def build_cold_email_prompt(company_info: Dict) -> str:
-    company_name = company_info.get("Company", "")
-    revenue = company_info.get("Revenue", "")
-    countries = company_info.get("Countries", "")
-    strategy = company_info.get("Strategy", "")
-    painpoints = company_info.get("Pain Points", "")
-    product_use_cases = company_info.get("Product use cases", "")
-
-    # Here we add a short "few-shot" style example
-    # to guide the model to produce a subject + short body.
-    example_email = """
+example_email = """
 Example of a successful cold email:
 
 SUBJECT: Driving Growth for ACME Inc.'s Global Expansion
@@ -251,6 +189,20 @@ Best,
 [Your Name]
 """
 
+from typing import Dict
+
+def build_cold_email_prompt(company_info: Dict) -> str:
+    company_name = company_info.get("Company", "")
+    revenue = company_info.get("Revenue", "")
+    countries = company_info.get("Countries", "")
+    strategy = company_info.get("Strategy", "")
+    painpoints = company_info.get("Pain Points", "")
+    product_use_cases = company_info.get("Products & use cases", "")
+
+    # Here we add a short "few-shot" style example
+    # to guide the model to produce a subject + short body.python
+    
+
     prompt = f"""
 You are an AI sales assistant at Mirakl. 
 Your role: write a personalized cold outreach email to {company_name}.
@@ -267,7 +219,7 @@ Guidelines:
 1. Write in a friendly, professional tone aligned with Mirakl's brand voice.
 2. Provide a subject line first on a separate line, then the email body.
 3. You can reference the sample format below, but make it unique to this company.
-4. Remain concise and avoid too many bullet points.
+4. Remain concise and avoid bullet points.
 
 Here is an example email for reference:
 {example_email}
@@ -278,10 +230,17 @@ Now craft YOUR new subject line and email below:
 
 def build_crm_email_prompt(company_info: Dict) -> str:
     """
-    Constructs a prompt for generating a personalized email based solely on CRM data.
-    This prompt uses enriched fields like ContactName, EmailHistory, CallSummary, and AdditionalNotes.
+    Constructs a prompt for generating a personalized email based on combined CRM and TamTam data.
+    This prompt uses both the CRM fields and the TamTam fields.
     """
     company = company_info.get("Company", "")
+    # TamTam context
+    revenue = company_info.get("Revenue", "")
+    countries = company_info.get("Countries", "")
+    strategy = company_info.get("Strategy", "")
+    painpoints = company_info.get("Pain Points", "")
+    product_use_cases = company_info.get("Products & use cases", "")
+    # CRM context
     contact_name = company_info.get("ContactName", "")
     last_interaction = company_info.get("LastInteraction", "")
     email_history = company_info.get("EmailHistory", "")
@@ -290,8 +249,15 @@ def build_crm_email_prompt(company_info: Dict) -> str:
 
     prompt = f"""
 You are an AI sales assistant at Mirakl.
-Your role: write a personalized follow-up email for {company} based solely on our CRM data.
-Context:
+Your role: write a personalized follow-up email for {company} using both our market data and CRM insights.
+Context from TamTam:
+- Annual online revenue: {revenue}
+- Countries/Markets: {countries}
+- High-level strategy: {strategy}
+- Key pain points: {painpoints}
+- Products & use cases: {product_use_cases}
+
+Additional CRM context:
 - Contact Name: {contact_name}
 - Last Interaction: {last_interaction}
 - Email History: {email_history}
@@ -299,10 +265,14 @@ Context:
 - Additional Notes: {additional_notes}
 
 Guidelines:
-1. Write in a friendly yet professional tone.
-2. Personalize the message to reflect the previous interactions with this prospect.
-3. Provide a clear call-to-action.
+1. Write in a friendly, professional tone aligned with Mirakl's brand voice.
+2. Provide a subject line first on a separate line, then the email body.
+3. You can reference the sample format below, but make it unique to this company.
+4. Remain concise and avoid bullet points.
 Keep the email under 180 words.
+
+Here is an example email for reference:
+{example_email}
 
 Now craft YOUR new email below:
 """
@@ -349,20 +319,15 @@ using the prompt.
 import openai
 from typing import Dict
 from config import OPENAI_API_KEY
-from prompt_engineering import build_cold_email_prompt
+from prompt_engineering import build_cold_email_prompt, build_crm_email_prompt
+
 import time
 import logging
 
-# We'll add a global or module-level variable to track cumulative cost
 TOTAL_API_COST = 0.0
 
 def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
-    """
-    Calls OpenAI to generate a cold email. 
-    Optionally updates a shared cost_tracker dict with aggregated usage/cost.
-    """
     global TOTAL_API_COST
-
     openai.api_key = OPENAI_API_KEY
     prompt = build_cold_email_prompt(company_info)
     start_time = time.time()
@@ -385,7 +350,6 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
         total_tokens = usage.get("total_tokens", 0)
         estimated_cost = (total_tokens / 1000) * 0.002
 
-        # Update global and optional dictionary
         TOTAL_API_COST += estimated_cost
         if cost_tracker is not None:
             cost_tracker["TotalTokens"] += total_tokens
@@ -399,7 +363,8 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "GeneratedEmail": generated_text,
             "ResponseTime": response_time,
             "TokensUsed": total_tokens,
-            "EstimatedCost": estimated_cost
+            "EstimatedCost": estimated_cost,
+            "Prompt": prompt
         }
 
     except Exception as e:
@@ -413,18 +378,10 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
     
 
 def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
-    """
-    Calls OpenAI to generate a CRM-based email using enriched CRM data.
-    Optionally updates a shared cost_tracker dict with aggregated usage/cost.
-    """
     global TOTAL_API_COST
-
     openai.api_key = OPENAI_API_KEY
-    # Use the CRM-specific prompt builder
-    from prompt_engineering import build_crm_email_prompt
     prompt = build_crm_email_prompt(company_info)
     start_time = time.time()
-
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -443,7 +400,6 @@ def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
         total_tokens = usage.get("total_tokens", 0)
         estimated_cost = (total_tokens / 1000) * 0.002
 
-        # Update global and optional dictionary
         TOTAL_API_COST += estimated_cost
         if cost_tracker is not None:
             cost_tracker["TotalTokens"] += total_tokens
@@ -457,7 +413,8 @@ def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "GeneratedEmail": generated_text,
             "ResponseTime": response_time,
             "TokensUsed": total_tokens,
-            "EstimatedCost": estimated_cost
+            "EstimatedCost": estimated_cost, 
+            "Prompt": prompt
         }
 
     except Exception as e:
@@ -466,7 +423,8 @@ def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "GeneratedEmail": "",
             "ResponseTime": None,
             "TokensUsed": None,
-            "EstimatedCost": None
+            "EstimatedCost": None,
+            "Prompt": prompt
         }
 
 --------------------------------------------------------------------------------
@@ -477,8 +435,6 @@ FILE: main.py
 
 """
 main.py
-
-Entry point for running the Cold Emails Generator AI Agent for a single selected company.
 """
 
 import pandas as pd
@@ -487,7 +443,7 @@ from email_generator import generate_cold_email
 from config import OUTPUT_FILE
 import logging
 
-def main(batch_mode: bool = False):
+def main(batch_mode):
     tamtam_df = load_tamtam_data()
     hubspot_df = load_hubspot_data()
     merged_df = merge_data(tamtam_df, hubspot_df)
@@ -500,14 +456,8 @@ def main(batch_mode: bool = False):
     print("Available companies:")
     for idx, row in merged_df.iterrows():
         print(f"{idx}: {row.get('Company', 'Unnamed Company')}")
-    logging.info("Available companies printed to terminal.")
 
-    if not batch_mode:
-        # -- Interactive single-company mode --
-        logging.info("Available companies:")
-        for idx, row in merged_df.iterrows():
-            logging.info(f"{idx}: {row.get('Company', 'Unnamed Company')}")
-
+    if not batch_mode: # generate mail for a single company
         try:
             selected_index = int(input("Enter the index of the company for which you want to generate the email: "))
         except ValueError:
@@ -520,7 +470,6 @@ def main(batch_mode: bool = False):
 
         selected_row = merged_df.loc[selected_index]
 
-        # Create a dictionary for Tamtam data (as before)
         company_info_tamtam = {
             "Company": selected_row.get("Company", ""),
             "Revenue": selected_row.get("Revenue", ""),
@@ -530,9 +479,13 @@ def main(batch_mode: bool = False):
             "Products & use cases": selected_row.get("Products & use cases", "")
         }
 
-        # Create a dictionary for CRM data using the enriched columns
         company_info_crm = {
             "Company": selected_row.get("Company", ""),
+            "Revenue": selected_row.get("Revenue", ""),
+            "Countries": selected_row.get("Countries", ""),
+            "Strategy": selected_row.get("Strategy", ""),
+            "Pain Points": selected_row.get("Pain Points", ""),
+            "Products & use cases": selected_row.get("Products & use cases", ""),
             "ContactName": selected_row.get("ContactName", ""),
             "Email": selected_row.get("Email", ""),
             "Domain": selected_row.get("Domain", ""),
@@ -543,18 +496,21 @@ def main(batch_mode: bool = False):
             "AdditionalNotes": selected_row.get("AdditionalNotes", "")
         }
 
+        """"
         logging.info("Validated TamTam Data: %s", company_info_tamtam)
         logging.info("Validated CRM Data: %s", company_info_crm)
+        """
 
         # Generate email using only Tamtam data
         result_tamtam = generate_cold_email(company_info_tamtam)
         email_text_tamtam = result_tamtam.get("GeneratedEmail", "")
 
-        # Generate email using only CRM data
+        # Generate email using CRM data + Tamtam data
         from email_generator import generate_crm_email
         result_crm = generate_crm_email(company_info_crm)
         email_text_crm = result_crm.get("GeneratedEmail", "")
 
+        """
         print("\nGenerated Email using Tamtam Data:")
         print("-" * 80)
         print(email_text_tamtam)
@@ -563,12 +519,24 @@ def main(batch_mode: bool = False):
         print("\nGenerated Email using CRM Data:")
         print("-" * 80)
         print(email_text_crm)
+        print("-" * 80)"
+        """
+        prompt_tamtam = result_tamtam.get("Prompt", "No prompt available for Tamtam email.")
+        prompt_crm = result_crm.get("Prompt", "No prompt available for CRM email.")
+
+        print("\nPrompt for Tamtam Data Email:")
+        print("-" * 80)
+        print(prompt_tamtam)
         print("-" * 80)
 
-        # Save both results to CSV (you can merge them into one DataFrame)
+        print("\nPrompt for CRM Data Email:")
+        print("-" * 80)
+        print(prompt_crm)
+        print("-" * 80)
+
         results = [
             {
-                "Version": "TamTam Data",
+                "Version": "Tamtam Data",
                 "Company": company_info_tamtam["Company"],
                 "GeneratedEmail": email_text_tamtam,
                 "ResponseTime_sec": result_tamtam.get("ResponseTime", ""),
@@ -576,7 +544,7 @@ def main(batch_mode: bool = False):
                 "EstimatedCost_$": result_tamtam.get("EstimatedCost", "")
             },
             {
-                "Version": "CRM Data",
+                "Version": "Tamtam + Mirakl CRM Data",
                 "Company": company_info_crm["Company"],
                 "GeneratedEmail": email_text_crm,
                 "ResponseTime_sec": result_crm.get("ResponseTime", ""),
@@ -589,7 +557,7 @@ def main(batch_mode: bool = False):
         print(f"Emails and metrics saved to {OUTPUT_FILE}")
 
     else:
-        # -- Batch mode: interactive selection of companies --
+        # send mails to multiple companies
         selected_indices = []
         print("Enter the indices of the companies you want to generate emails for.")
         print("Type 'STOP' when you are finished.")
@@ -642,10 +610,7 @@ def main(batch_mode: bool = False):
                      cost_tracker["TotalTokens"], cost_tracker["TotalCost"])
 
 if __name__ == "__main__":
-    # You can toggle batch_mode to True/False here or 
-    # parse from command line arguments for flexibility
-    # e.g., python main.py --batch
-    main(batch_mode=False)
+    main(batch_mode = False)
 
 
 --------------------------------------------------------------------------------

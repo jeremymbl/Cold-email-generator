@@ -8,20 +8,15 @@ using the prompt.
 import openai
 from typing import Dict
 from config import OPENAI_API_KEY
-from prompt_engineering import build_cold_email_prompt
+from prompt_engineering import build_cold_email_prompt, build_crm_email_prompt
+
 import time
 import logging
 
-# We'll add a global or module-level variable to track cumulative cost
 TOTAL_API_COST = 0.0
 
 def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
-    """
-    Calls OpenAI to generate a cold email. 
-    Optionally updates a shared cost_tracker dict with aggregated usage/cost.
-    """
     global TOTAL_API_COST
-
     openai.api_key = OPENAI_API_KEY
     prompt = build_cold_email_prompt(company_info)
     start_time = time.time()
@@ -44,7 +39,6 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
         total_tokens = usage.get("total_tokens", 0)
         estimated_cost = (total_tokens / 1000) * 0.002
 
-        # Update global and optional dictionary
         TOTAL_API_COST += estimated_cost
         if cost_tracker is not None:
             cost_tracker["TotalTokens"] += total_tokens
@@ -58,7 +52,8 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "GeneratedEmail": generated_text,
             "ResponseTime": response_time,
             "TokensUsed": total_tokens,
-            "EstimatedCost": estimated_cost
+            "EstimatedCost": estimated_cost,
+            "Prompt": prompt
         }
 
     except Exception as e:
@@ -72,18 +67,10 @@ def generate_cold_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
     
 
 def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
-    """
-    Calls OpenAI to generate a CRM-based email using enriched CRM data.
-    Optionally updates a shared cost_tracker dict with aggregated usage/cost.
-    """
     global TOTAL_API_COST
-
     openai.api_key = OPENAI_API_KEY
-    # Use the CRM-specific prompt builder
-    from prompt_engineering import build_crm_email_prompt
     prompt = build_crm_email_prompt(company_info)
     start_time = time.time()
-
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -102,7 +89,6 @@ def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
         total_tokens = usage.get("total_tokens", 0)
         estimated_cost = (total_tokens / 1000) * 0.002
 
-        # Update global and optional dictionary
         TOTAL_API_COST += estimated_cost
         if cost_tracker is not None:
             cost_tracker["TotalTokens"] += total_tokens
@@ -116,7 +102,8 @@ def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "GeneratedEmail": generated_text,
             "ResponseTime": response_time,
             "TokensUsed": total_tokens,
-            "EstimatedCost": estimated_cost
+            "EstimatedCost": estimated_cost, 
+            "Prompt": prompt
         }
 
     except Exception as e:
@@ -125,5 +112,6 @@ def generate_crm_email(company_info: Dict, cost_tracker: Dict = None) -> dict:
             "GeneratedEmail": "",
             "ResponseTime": None,
             "TokensUsed": None,
-            "EstimatedCost": None
+            "EstimatedCost": None,
+            "Prompt": prompt
         }

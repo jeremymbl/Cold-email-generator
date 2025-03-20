@@ -1,7 +1,5 @@
 """
 main.py
-
-Entry point for running the Cold Emails Generator AI Agent for a single selected company.
 """
 
 import pandas as pd
@@ -10,7 +8,7 @@ from email_generator import generate_cold_email
 from config import OUTPUT_FILE
 import logging
 
-def main(batch_mode: bool = False):
+def main(batch_mode):
     tamtam_df = load_tamtam_data()
     hubspot_df = load_hubspot_data()
     merged_df = merge_data(tamtam_df, hubspot_df)
@@ -23,14 +21,8 @@ def main(batch_mode: bool = False):
     print("Available companies:")
     for idx, row in merged_df.iterrows():
         print(f"{idx}: {row.get('Company', 'Unnamed Company')}")
-    logging.info("Available companies printed to terminal.")
 
-    if not batch_mode:
-        # -- Interactive single-company mode --
-        logging.info("Available companies:")
-        for idx, row in merged_df.iterrows():
-            logging.info(f"{idx}: {row.get('Company', 'Unnamed Company')}")
-
+    if not batch_mode: # generate mail for a single company
         try:
             selected_index = int(input("Enter the index of the company for which you want to generate the email: "))
         except ValueError:
@@ -43,7 +35,6 @@ def main(batch_mode: bool = False):
 
         selected_row = merged_df.loc[selected_index]
 
-        # Create a dictionary for Tamtam data (as before)
         company_info_tamtam = {
             "Company": selected_row.get("Company", ""),
             "Revenue": selected_row.get("Revenue", ""),
@@ -53,8 +44,6 @@ def main(batch_mode: bool = False):
             "Products & use cases": selected_row.get("Products & use cases", "")
         }
 
-        # Create a dictionary for CRM data using the enriched columns
-                # Create a combined dictionary for CRM version using both TamTam and CRM data
         company_info_crm = {
             "Company": selected_row.get("Company", ""),
             "Revenue": selected_row.get("Revenue", ""),
@@ -72,18 +61,21 @@ def main(batch_mode: bool = False):
             "AdditionalNotes": selected_row.get("AdditionalNotes", "")
         }
 
+        """"
         logging.info("Validated TamTam Data: %s", company_info_tamtam)
         logging.info("Validated CRM Data: %s", company_info_crm)
+        """
 
         # Generate email using only Tamtam data
         result_tamtam = generate_cold_email(company_info_tamtam)
         email_text_tamtam = result_tamtam.get("GeneratedEmail", "")
 
-        # Generate email using only CRM data
+        # Generate email using CRM data + Tamtam data
         from email_generator import generate_crm_email
         result_crm = generate_crm_email(company_info_crm)
         email_text_crm = result_crm.get("GeneratedEmail", "")
 
+        """
         print("\nGenerated Email using Tamtam Data:")
         print("-" * 80)
         print(email_text_tamtam)
@@ -92,12 +84,24 @@ def main(batch_mode: bool = False):
         print("\nGenerated Email using CRM Data:")
         print("-" * 80)
         print(email_text_crm)
+        print("-" * 80)"
+        """
+        prompt_tamtam = result_tamtam.get("Prompt", "No prompt available for Tamtam email.")
+        prompt_crm = result_crm.get("Prompt", "No prompt available for CRM email.")
+
+        print("\nPrompt for Tamtam Data Email:")
+        print("-" * 80)
+        print(prompt_tamtam)
         print("-" * 80)
 
-        # Save both results to CSV (you can merge them into one DataFrame)
+        print("\nPrompt for CRM Data Email:")
+        print("-" * 80)
+        print(prompt_crm)
+        print("-" * 80)
+
         results = [
             {
-                "Version": "TamTam Data",
+                "Version": "Tamtam Data",
                 "Company": company_info_tamtam["Company"],
                 "GeneratedEmail": email_text_tamtam,
                 "ResponseTime_sec": result_tamtam.get("ResponseTime", ""),
@@ -105,7 +109,7 @@ def main(batch_mode: bool = False):
                 "EstimatedCost_$": result_tamtam.get("EstimatedCost", "")
             },
             {
-                "Version": "CRM Data",
+                "Version": "Tamtam + Mirakl CRM Data",
                 "Company": company_info_crm["Company"],
                 "GeneratedEmail": email_text_crm,
                 "ResponseTime_sec": result_crm.get("ResponseTime", ""),
@@ -118,7 +122,7 @@ def main(batch_mode: bool = False):
         print(f"Emails and metrics saved to {OUTPUT_FILE}")
 
     else:
-        # -- Batch mode: interactive selection of companies --
+        # send mails to multiple companies
         selected_indices = []
         print("Enter the indices of the companies you want to generate emails for.")
         print("Type 'STOP' when you are finished.")
@@ -171,7 +175,4 @@ def main(batch_mode: bool = False):
                      cost_tracker["TotalTokens"], cost_tracker["TotalCost"])
 
 if __name__ == "__main__":
-    # You can toggle batch_mode to True/False here or 
-    # parse from command line arguments for flexibility
-    # e.g., python main.py --batch
-    main(batch_mode=False)
+    main(batch_mode = False)

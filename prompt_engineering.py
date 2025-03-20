@@ -5,19 +5,7 @@ Contains the prompt templates and logic to craft instructions
 for generating cold emails.
 """
 
-from typing import Dict
-
-def build_cold_email_prompt(company_info: Dict) -> str:
-    company_name = company_info.get("Company", "")
-    revenue = company_info.get("Revenue", "")
-    countries = company_info.get("Countries", "")
-    strategy = company_info.get("Strategy", "")
-    painpoints = company_info.get("Pain Points", "")
-    product_use_cases = company_info.get("Product use cases", "")
-
-    # Here we add a short "few-shot" style example
-    # to guide the model to produce a subject + short body.
-    example_email = """
+example_email = """
 Example of a successful cold email:
 
 SUBJECT: Driving Growth for ACME Inc.'s Global Expansion
@@ -35,6 +23,16 @@ Best,
 [Your Name]
 """
 
+from typing import Dict
+
+def build_cold_email_prompt(company_info: Dict) -> str:
+    company_name = company_info.get("Company", "")
+    revenue = company_info.get("Revenue", "")
+    countries = company_info.get("Countries", "")
+    strategy = company_info.get("Strategy", "")
+    painpoints = company_info.get("Pain Points", "")
+    product_use_cases = company_info.get("Products & use cases", "")
+    
     prompt = f"""
 You are an AI sales assistant at Mirakl. 
 Your role: write a personalized cold outreach email to {company_name}.
@@ -51,7 +49,7 @@ Guidelines:
 1. Write in a friendly, professional tone aligned with Mirakl's brand voice.
 2. Provide a subject line first on a separate line, then the email body.
 3. You can reference the sample format below, but make it unique to this company.
-4. Remain concise and avoid too many bullet points.
+4. Remain concise and avoid bullet points.
 
 Here is an example email for reference:
 {example_email}
@@ -97,10 +95,14 @@ Additional CRM context:
 - Additional Notes: {additional_notes}
 
 Guidelines:
-1. Write in a friendly yet professional tone.
-2. Personalize the message to reflect both the market context and previous interactions.
-3. Provide a clear call-to-action.
+1. Write in a friendly, professional tone aligned with Mirakl's brand voice.
+2. Provide a subject line first on a separate line, then the email body.
+3. You can reference the sample format below, but make it unique to this company.
+4. Remain concise and avoid bullet points.
 Keep the email under 180 words.
+
+Here is an example email for reference:
+{example_email}
 
 Now craft YOUR new email below:
 """
